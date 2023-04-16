@@ -70,7 +70,7 @@ Impacket :
 # Todo
 
 - Find a way to reset kerberos authentications such a way that clients can retry instantly to authenticate when we steal their tickets. I found that windows is quite sensible to failures and tend not to retry authentications when something goes wrong. Maybe answer with an `KRB_AP_ERR_TKT_EXPIRED` could have the expected effect.
-- Make it work against LDAP as it does not require signing by default AND allows for full domain compromise by adding a new domain admin. It would do so by leveraging kerberos relaying from SMB/CIFS ticket to a DC to LDAP to the very same DC, or by extracting a high privilege AP_REQ directly from the SASL in an LDAP connection.
+- Make it work against LDAP as it does not require signing by default AND allows for full domain compromise by adding a new domain admin.
 - Implement ntlm relaying altogether maybe ? So that this tool would be self-sufficient in case `ZONE_UPDATE_UNSECURE` is availabe. Multiple modules could be used at the same time, allowing one to run the first module available for an interesting packet.
 - Allow to disable the whitelist mechanism completely as it might be a problem when computer accounts connect first, then a user account is used on that computer. In this configuration (which could happen quite often) there is a risk that only computer accounts owned tickets are tried and not user owned tickets.
 
