@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "krbjack"
+version = "1.0.0"
+description = "Kerberos AP-REQ hijacking tool with DNS unsecure updates abuse."
+authors = ["Virgile Jarry <virgile@mailbox.org>"]
+readme = "README.md"
+license = "Beerware"
+homepage = "https://github.com/almandin/krbjack"
+repository = "https://github.com/almandin/krbjack"
+documentation = "https://github.com/almandin/krbjack/README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+scapy = "^2.5.0"
+impacket = "^0.10.0"
+dnspython = "^2.0.0"
+colorama = "^0.4.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+krbjack = 'krbjack.__main__:main'
