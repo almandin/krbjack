@@ -19,11 +19,15 @@ class TCPForwarder(socketserver.StreamRequestHandler):
 
         # Method used to check wether a should be forwarded or not:
         def let_client_data_pass(data):
-            if self.server.cond_f(self.client_address, self.server.destination[1], data):
-                self.server.interesting_packet_queue.put((self.client_address, data))
-                self.server.should_stop = True
-                return False
-            return True
+            # Here, server.condition_functions contain a list of functions declared by
+            # modules to check wether a packet is interesting.
+            for f in self.server.condition_functions:
+                r, module = f(self.client_address, self.server.destination[1], data)
+                if r:
+                    self.server.interesting_packet_queue.put((self.client_address, data, module))
+                    self.server.should_stop = True
+                    return False
+                return True
 
         # Method used to modify packets on the fly before being sent back to a client.
         # Here some SMB flags are removed to prevent SMB signature to occur when it is supported by
@@ -84,20 +88,15 @@ class TCPForwarder(socketserver.StreamRequestHandler):
 #                         the port to listen to localy to perform forwarding)
 #   packet_queue        : A queue.Queue object in which the first "interesting" packet will be
 #                         pushed to.
-#   cond_f              : A function with three arguments and returning a boolean. This function
-#                         decides if a packet is deemed "interesting" (contains an AP_REQ).
-#                         If it returns True -> the packet is pushed to the queue and the event
-#                         is set to warn other threads that they must stop forward stuff. It it
-#                         returns False, the packet is forwarded as is.
-#                         The three arguments it takes are :
-#                         - the client sending the packet, a 2-tuple (ip, source port)
-#                         - The port to which the client sends data (int, for example 445)
-#                         - The raw packet data (bytes) sent by the client (TCP payload only
-#                           without TCP headers)
+#   condition_functions : A list of functions used to check wether a packet is interesting.
+#                         The functions must return a 2-tuple with the following two informations:
+#                              bool : is the packet interesting
+#                              object: the module object itself (self) to know which module
+#                                      declared the packet interesting
 #   ignore_ips          : A set of IPs we dont want to inspect and modify packets. These clients
 #                         will have their packets forwarded as-is without inspection.
 class TCPForwardThread(threading.Thread):
-    def __init__(self, destination, port, packet_queue, cond_f, ignore_ips):
+    def __init__(self, destination, port, packet_queue, condition_functions, ignore_ips):
         threading.Thread.__init__(self)
         self.name = f"TCPForwarderThread-{destination}:{port}"
         socketserver.TCPServer.allow_reuse_address = True
@@ -105,7 +104,7 @@ class TCPForwardThread(threading.Thread):
         self.forwarder.destination = (str(destination), port)
         self.forwarder.should_stop = False
         self.forwarder.interesting_packet_queue = packet_queue
-        self.forwarder.cond_f = cond_f
+        self.forwarder.condition_functions = condition_functions
         self.forwarder.ignore_ips = ignore_ips
 
     def run(self):

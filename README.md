@@ -16,14 +16,14 @@ You do need to install the tool with root rights as it will need to be runnable 
 
 # Usage
 
-`sudo krbjack --target-name <targetNBTName> [--target-ip <targetIP>] --domain <domainName> --dc-ip <domainControlerIpAddress> --ports <port1,port2,port3,...> psexec <executable.exe>`
+`sudo krbjack --target-name <targetNBTName> [--target-ip <targetIP>] --domain <domainName> --dc-ip <domainControlerIpAddress> --ports <port1,port2,port3,...> --executable <executable.exe>`
 
 - `--target-name` : The netbios name of your target, the one you will impersonate, the one you want will pwn if successful. Example : `winserv2`;
 - `--target-ip` : You might want to specify the IP address of your target. The alternative is to let this tool query the DNS to get its IP addresses. A quick naive scan is performed to choose one IP from the ones returned by the DNS though this method is flawed. Example: `192.168.42.20`;
 - `--domain` : The domain name to which your target is joined. Example : `windomain.local`;
 - `--dc-ip` : The IP address of the domain controller you will be poisoning DNS records. Can be any domain controller as the DNS zones will be replicated automatically. Example : `192.168.42.10`;
 - `--ports` : A list of TCP ports which will be open on your attacker's machine to forward traffic to your target. This list is *very* important because if you omit one port which is open on the legitimate service (your target), clients wont be able to access it during the time of the attack. Setting this list of ports correctly is the key to perform the attack without doing to much of a mess in the network. Example : `135,139,445,80,443,8080`
-- `psexec <executable.exe> [--no-cleanup]` : The psexec command followed by the path to an executable on your attacker's machine. This executable will be uploaded and executed psexec-style on your target if the attack succeeds. Example : `psexec /home/almandin/metx64revtcp.exe`.
+- `--executable <executable.exe>` : The path to an executable on your attacker's machine. This executable will be uploaded and executed psexec-style on your target if the attack succeeds. Example : `/home/almandin/metx64revtcp.exe`.
 
     The executable you provide can be either a "standard" executable, or a windows service executable (better). If it is a "standard" executable, windows will kill it when running after a few seconds if it has not ended already, because as it is run as a service, Windows expects it to do proper signaling (behave as a true service). Though it still works, you might want to migrate quickly your meterpreter when the session is established.
 
@@ -36,7 +36,7 @@ You do need to install the tool with root rights as it will need to be runnable 
 - `--check` : Used to performs no attack at all, just to check if the DNS zone is vulnerable.
 - `--no-poison` : Can  be used to set all the mess in place but prevent DNS poisoning from being done. Just in case you managed to poison DNS yourself or if you found another way to point clients to you instead of the legitimate service.
 
-## What are the preriquisites for this to work ?
+## What are the requirements for this to work ?
 
 First you need to check if the domain you are testing is vulnerable to the main misconfiguration : `ZONE_UPDATE_UNSECURE`. For this you can use external tools such as PingCastle, or let Krbjack do it with the addition of the `--check` flag on the command line.
 
@@ -54,7 +54,7 @@ First the man in the middle is put in place by changing DNS records attached to 
 
 In the meantime, the tool starts multithreaded TCP servers to mimick your target TCP services. It starts to serve SMB, HTTP, whatever service you state in the command line. It does so just like an SSH port forwarding : when you reach to the attacker's started services, krbjack initiates connection to the true legitimate service on the same port, and forwards every packet from the legitimate client, to the legitimate service. This way, a full man in the middle is performed both ways, this prevents traffic from being completely blocked.
 
-When the man in the middle is performed, every single packet is inspected to find kerberos AP_REQ packets (containing what's necessary to authenticate to services). When such a ticket is found to be sent from a client, it is NOT forwarded to the legitimate service, but it is used in real time to connect to the legitimate service *on behalf* of the legitimate client. This way krbjack can perform authenticated stuff to the legitimate service. At the moment only SMB is supported, meaning that krbjack performs authenticated SMB actions at this time of the attack workflow. It then uses this authenticated channel to check if the legitimate client was an administrator (tries to list directory ADMIN$ - C:\Windows). If it happens that the client was an administrator, man in the middle is stopped, DNS records are fixed ant it then uses the very same authenticated channel to perform a full psexec.
+When the man in the middle is performed, every single packet is inspected to find kerberos AP_REQ packets (containing what's necessary to authenticate to services) or other authenticating packets. When such a packet/ticket is found to be sent from a client, it is used in real time to connect to the legitimate service *on behalf* of the legitimate client. This way krbjack can perform authenticated stuff to the legitimate service. At the moment only SMB is supported, meaning that krbjack performs authenticated SMB actions at this time of the attack workflow. It then uses this authenticated channel to check if the legitimate client was an administrator (tries to list directory ADMIN$ - C:\Windows). If it happens that the client was an administrator, man in the middle is stopped, DNS records are fixed ant it then uses the very same authenticated channel to perform a full psexec.
 
 Krbjack also modifies packets on-the-fly depending on the protocol to remove security flags when possible (SMB flags "signing required", "supported" etc... though it is quite naive for the time being).
 

