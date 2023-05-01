@@ -6,6 +6,9 @@ The benefit from using this technique of man in the middle is that it goes throu
 
 Moreover I made the choice to perform fully functionnal AP_REQ hijacking to allow compromission of systems using kerberos instead of NetNTLM.
 
+![image](https://user-images.githubusercontent.com/9830129/235469315-a77c5875-393e-40db-8301-e006013cc98f.png)
+
+
 # Install
 
 ```bash
