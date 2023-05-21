@@ -66,12 +66,12 @@ def main():
              " poisoning"
     )
     parser.add_argument(
-        "--ports", action=SplitIntArgs, required=True,
+        "--ports", action=SplitIntArgs, required=False, default=[],
         help="List of TCP ports to forward from the incoming clients to the attacked system."
              " Comma-separated port numbers. Example : 139,445,8080."
     )
     parser.add_argument(
-        "--executable", type=pathlib.Path, required=True,
+        "--executable", type=pathlib.Path, required=False,
         help=(
             "The executable to push and execute to the remote target. "
             "Can be generated with msfvenom type exe-service. "
@@ -82,9 +82,9 @@ def main():
             " run."
         )
     )
-    # Feeling to lazy to implement automatic module detection, they must be listed here
+    # Feeling too lazy to implement automatic module detection, they must be listed here
     # for the time being.
-    modules = ["psexec"]
+    modules = ["krboversmb"]
 
     args = parser.parse_args()
     colorama_init()
