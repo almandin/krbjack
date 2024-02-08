@@ -16,19 +16,36 @@ from krbjack.utils import PeriodicTimer
 
 class KrbJacker:
     def __init__(self, args, modules):
+        self.sub_cmd = args.sub_cmd
         self.args = args
-        self.destination_name = args.target_name
-        self.domain = args.domain
-        self.dc_ip = str(args.dc_ip)
-        self.is_check = args.check
-        self.ports = args.ports
-        self.should_poison = not args.no_poison
+        self.is_poisoning_active = False
         self.forwarders = []
         self.ignore_set = set()
-        self.is_poisoning_active = False
         self.owned = False
         self.available_modules = [importlib.import_module(f"krbjack.modules.{m}") for m in modules]
         self.running_modules = []
+
+        if self.sub_cmd == "check":
+            self.domain = args.domain
+            self.dc_ip = str(args.dc_ip)
+        elif self.sub_cmd == "run":
+            self.domain = args.domain
+            self.dc_ip = str(args.dc_ip)
+            self.destination_name = args.target_name
+            self.should_poison = not args.no_poison
+            self.ports = args.ports
+            # DNS Request to get ip addresses for this target
+            try:
+                self.original_ips = self.get_dns_record(self.destination_name)
+            except dns.resolver.NXDOMAIN:
+                print(
+                    f"\tIt looks like {Fore.LIGHTRED_EX}something is wrong{Fore.RESET}, the dns "
+                    f"server (DC) located at {Fore.LIGHTBLUE_EX}{self.dc_ip}{Fore.RESET} does not "
+                    f"look to know the name {Fore.LIGHTBLUE_EX}{self.destination_name}{Fore.RESET}"
+                )
+                print("\tMaybe you mispelled something ?")
+                print("Bye.")
+                exit(1)
 
         # Get our own IP here
         try:
@@ -44,40 +61,29 @@ class KrbJacker:
             )
             exit(1)
 
-        # DNS Request to get ip addresses for this target
-        try:
-            self.original_ips = self.get_dns_record(self.destination_name)
-        except dns.resolver.NXDOMAIN:
-            print(
-                f"\tIt looks like {Fore.LIGHTRED_EX}something is wrong{Fore.RESET}, the dns server "
-                f"(DC) located at {Fore.LIGHTBLUE_EX}{self.dc_ip}{Fore.RESET} does not look to know"
-                f" the name {Fore.LIGHTBLUE_EX}{self.destination_name}{Fore.RESET}"
-            )
-            print("\tMaybe you mispelled something ?")
-            print("Bye.")
-            exit(1)
-        if args.target_ip:
-            self.destination_ip = str(args.target_ip)
-        else:
-            # Chosing one IP to talk to the target from the ones available
-            # Naive scan on tcp 445 to determine which IP to use
-            self.destination_ip = None
-            for ip in self.original_ips:
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(3.0)
-                    s.connect((ip, 445))
-                    s.close()
-                    self.destination_ip = ip
-                except (TimeoutError, OSError):
-                    continue
-            if self.destination_ip is None:
-                print(
-                    f"{Fore.LIGHTRED_EX}Something is not right{Fore.RESET}, it looks like you "
-                    f"cannot reach any of the IP addresses suggested by the DNS server (the DC).\n"
-                    "Maybe try with the --target-ip option to override this naive detection."
-                )
-                exit(1)
+        if self.sub_cmd == "run":
+            if args.target_ip:
+                self.destination_ip = str(args.target_ip)
+            else:
+                # Chosing one IP to talk to the target from the ones available
+                # Naive scan on tcp 445 to determine which IP to use
+                self.destination_ip = None
+                for ip in self.original_ips:
+                    try:
+                        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        s.settimeout(3.0)
+                        s.connect((ip, 445))
+                        s.close()
+                        self.destination_ip = ip
+                    except (TimeoutError, OSError):
+                        continue
+                if self.destination_ip is None:
+                    print(
+                        f"{Fore.LIGHTRED_EX}Something is not right{Fore.RESET}, it looks like you "
+                        f"cannot reach any of the IP addresses suggested by the DNS server (the DC)"
+                        ".\nMaybe try with the --target-ip option to override this naive detection."
+                    )
+                    exit(1)
 
     # Queries DNS to get a list of answers for a typical A query
     def get_dns_record(self, name):
@@ -123,7 +129,7 @@ class KrbJacker:
 
     def run(self):
         is_poisonable = self.check()
-        if self.is_check:
+        if self.sub_cmd == "check":
             print(
                 "Check mode : no poisoning will be done, no man-in-the-middle made nor any "
                 "side-effect inducing actions."
