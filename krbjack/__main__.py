@@ -34,44 +34,55 @@ def main():
         """
     )
     parser = argparse.ArgumentParser(
-        prog="KrbJack",
+        prog="krbjack",
         epilog="Use at your own risk, read the README to know side effects of this tool."
                " - Virgile @almandin"
     )
-    mutual_exclu_group = parser.add_mutually_exclusive_group()
-    mutual_exclu_group.add_argument(
-        "--check", action="store_true",
-        help="Only check if DNS unsecure updates are possible."
+    subparsers = parser.add_subparsers(required=True, dest="sub_cmd", metavar="command")
+    subcommand_check = subparsers.add_parser(
+        'check', help="Only check if DNS unsecure updates are possible."
     )
-    mutual_exclu_group.add_argument(
-        "--no-poison", action="store_true",
-        help="Start traffic forwarding and inspection without poisoning DNS records"
-    )
-    parser.add_argument(
-        "--target-name", required=True, type=str,
-        help="The Netbios name (without domain name) of the machine you want to attack."
-    )
-    parser.add_argument(
-        "--target-ip", required=False, type=IPv4Address,
-        help="The IP address of your target, can be used if it looks complicated to get this"
-             " tool choose the right one from the ones listed by the DNS server"
-    )
-    parser.add_argument(
+    subcommand_check.add_argument(
         "--domain", type=str, required=True,
         help="The name of the Active Directory domain in use"
     )
-    parser.add_argument(
+    subcommand_check.add_argument(
         "--dc-ip", type=IPv4Address, required=True,
         help="The IP address of the domain controller we want to talk to to perform DNS records"
              " poisoning"
     )
-    parser.add_argument(
-        "--ports", action=SplitIntArgs, required=False, default=[],
+    subcommand_exploit = subparsers.add_parser(
+        'run', help="Exploit the DNS insecure update misconfiguration"
+    )
+    subcommand_exploit.add_argument(
+        "--domain", type=str, required=True,
+        help="The name of the Active Directory domain in use"
+    )
+    subcommand_exploit.add_argument(
+        "--dc-ip", type=IPv4Address, required=True,
+        help="The IP address of the domain controller we want to talk to to perform DNS records"
+             " poisoning"
+    )
+    subcommand_exploit.add_argument(
+        "--no-poison", required=False, action="store_true",
+        help="Start traffic forwarding and inspection without poisoning DNS records"
+    )
+    subcommand_exploit.add_argument(
+        "--target-name", required=True, type=str,
+        help="The Netbios name (without domain name) of the machine you want to attack."
+    )
+    subcommand_exploit.add_argument(
+        "--target-ip", required=True, type=IPv4Address,
+        help="The IP address of your target, can be used if it looks complicated to get this"
+             " tool choose the right one from the ones listed by the DNS server"
+    )
+    subcommand_exploit.add_argument(
+        "--ports", action=SplitIntArgs, required=True, default=[],
         help="List of TCP ports to forward from the incoming clients to the attacked system."
              " Comma-separated port numbers. Example : 139,445,8080."
     )
-    parser.add_argument(
-        "--executable", type=pathlib.Path, required=False,
+    subcommand_exploit.add_argument(
+        "--executable", type=pathlib.Path, required=True,
         help=(
             "The executable to push and execute to the remote target. "
             "Can be generated with msfvenom type exe-service. "

