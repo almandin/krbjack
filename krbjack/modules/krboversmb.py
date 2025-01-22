@@ -2,7 +2,7 @@ from scapy.layers.smb2 import SMB2_Header, SMB2_Session_Setup_Request
 from krbjack.modules.utils import HomeBackedPSEXEC
 from impacket.smbconnection import SessionError
 from scapy.layers.kerberos import KRB_AP_REQ
-from scapy.layers.gssapi import SPNEGO_Token
+from scapy.layers.spnego import SPNEGO_Token
 
 from .utils import getAuthenticatedImpacketSMBConnection
 
